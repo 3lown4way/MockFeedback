@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>수학 실전 모의고사 피드백</title>
+    <link rel="stylesheet" href="./styles.css?v=10" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="app-actions screen-only" aria-label="문서 도구">
+        <span id="saveStatus" class="save-status">저장됨</span>
+        <button id="resetButton" class="tool-button" type="button" title="초기화" aria-label="초기화">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M3 12a9 9 0 1 0 9-9 9.8 9.8 0 0 0-6.7 2.7L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+        <button id="printButton" class="tool-button primary" type="button" title="이미지 저장" aria-label="이미지 저장">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M12 15V3" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="workspace">
+        <aside class="editor-panel" aria-label="보고서 편집">
+          <section class="editor-section">
+            <h2>기본 정보</h2>
+            <label class="field">
+              <span>보고서 제목</span>
+              <input id="examTitleInput" type="text" autocomplete="off" />
+            </label>
+            <div class="field-grid">
+              <label class="field">
+                <span>원점수</span>
+                <input id="rawScoreInput" type="text" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>등급컷</span>
+                <input id="cutScoreInput" type="text" autocomplete="off" />
+              </label>
+            </div>
+          </section>
+
+          <section class="editor-section">
+            <div class="section-row">
+              <h2>회독별 문항</h2>
+              <button id="addRowButton" class="small-button" type="button">행 추가</button>
+            </div>
+            <div id="roundTabs" class="round-tabs" role="tablist"></div>
+            <div id="roundEditor" class="round-editor"></div>
+          </section>
+
+          <section class="editor-section">
+            <h2>하단 피드백</h2>
+            <label class="field">
+              <span>느낀 점</span>
+              <textarea id="notesInput" rows="7"></textarea>
+            </label>
+            <label class="field">
+              <span>FEEDBACK</span>
+              <textarea id="feedbackInput" rows="4"></textarea>
+            </label>
+          </section>
+        </aside>
+
+        <main class="preview-shell">
+          <div id="overflowNotice" class="overflow-notice" hidden></div>
+          <div id="reportRoot" class="report-root" aria-label="보고서 미리보기"></div>
+        </main>
+      </div>
+    </div>
+
+    <script src="./app.js?v=10"></script>
+  </body>
+</html>
