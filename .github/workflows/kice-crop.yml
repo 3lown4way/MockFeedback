@@ -15,9 +15,9 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install --upgrade pip requests pymupdf pillow
-      - run: python scripts/inspect_modern_csat.py
+      - run: python scripts/run_builder_v2.py
       - uses: actions/upload-artifact@v4
         with:
-          name: modern-csat-inspection
-          path: inspect_csat/
+          name: kice-official-calculus-fixed
+          path: out/
           if-no-files-found: error
