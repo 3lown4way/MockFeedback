@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install --upgrade pip requests pymupdf pillow
-      - run: python scripts/kice_inspect.py
+      - run: python scripts/run_builder_v2.py
       - uses: actions/upload-artifact@v4
         with:
           name: kice-official-calculus
