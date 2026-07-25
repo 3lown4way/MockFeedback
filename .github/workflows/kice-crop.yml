@@ -1,9 +1,9 @@
 name: Temporary KICE Crop
 
 on:
-  push:
+  pull_request:
     branches:
-      - tmp-kice-calculus-crop
+      - main
   workflow_dispatch:
 
 jobs:
