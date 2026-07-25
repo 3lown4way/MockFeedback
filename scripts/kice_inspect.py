@@ -1,79 +1,100 @@
 import csv
-import io
 import json
-import os
-import zipfile
+import re
 from pathlib import Path
+from urllib.parse import quote, urljoin
 
-import gdown
+import requests
+from bs4 import BeautifulSoup
 
 ROOT = Path('work')
 ROOT.mkdir(exist_ok=True)
+S = requests.Session()
+S.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36'})
 
-PDF_LIST_ID = '1nByzdtGHT07SJjeE7qfYOcrt0ofCyBOt'
-META_ID = '1ZSZPoFtkWSLR8aDMg8Hw-bOzM6IqXvvQ'
 
-pdf_list_path = ROOT / 'kcsat-ml.json'
-meta_zip_path = ROOT / 'kcsat-ml-meta.zip'
+def norm(s):
+    return re.sub(r'\s+', ' ', s or '').strip()
 
-gdown.download(id=PDF_LIST_ID, output=str(pdf_list_path), quiet=False)
-gdown.download(id=META_ID, output=str(meta_zip_path), quiet=False)
+posts = []
+for page in range(1, 80):
+    url = f'https://horaeng.com/wp-json/wp/v2/posts?per_page=100&page={page}&_fields=id,date,link,title,content'
+    r = S.get(url, timeout=40)
+    if r.status_code == 400 and 'rest_post_invalid_page_number' in r.text:
+        break
+    r.raise_for_status()
+    batch = r.json()
+    if not batch:
+        break
+    posts.extend(batch)
+    print('posts page', page, 'count', len(batch))
 
-with open(pdf_list_path, 'r', encoding='utf-8') as f:
-    source_map = json.load(f)
-
-meta_dir = ROOT / 'meta'
-meta_dir.mkdir(exist_ok=True)
-with zipfile.ZipFile(meta_zip_path) as zf:
-    zf.extractall(meta_dir)
-
+(ROOT/'horaeng_posts.json').write_text(json.dumps(posts, ensure_ascii=False), encoding='utf-8')
 rows = []
-for p in sorted(meta_dir.rglob('*.json')):
+for post in posts:
+    title = norm(BeautifulSoup(post.get('title', {}).get('rendered', ''), 'html.parser').get_text(' '))
+    soup = BeautifulSoup(post.get('content', {}).get('rendered', ''), 'html.parser')
+    text = norm(soup.get_text(' '))
+    combined = title + ' ' + text[:1200]
+    found_years = {int(x) for x in re.findall(r'(20(?:1[2-9]|2[0-7]))\s*학년도', combined)}
+    for cal in re.findall(r'(20(?:1[1-9]|2[0-6]))\s*년', combined):
+        found_years.add(int(cal) + 1)
+    target_years = sorted(y for y in found_years if 2012 <= y <= 2027)
+    if not target_years:
+        continue
+    exam = ''
+    if re.search(r'6\s*월', combined): exam = '6월'
+    if re.search(r'9\s*월', combined): exam = '9월'
+    if re.search(r'수능|대학수학능력시험', combined): exam = '수능'
+    if not exam:
+        continue
+    for a in soup.find_all('a', href=True):
+        href = urljoin(post.get('link',''), a['href'])
+        anchor = norm(a.get_text(' '))
+        decoded = requests.utils.unquote(href)
+        hay = (anchor + ' ' + decoded).lower()
+        if '.pdf' not in hay or not ('수학' in hay or 'math' in hay):
+            continue
+        if not ('문제' in hay or 'question' in hay or 'mun' in hay):
+            continue
+        if any(bad in hay for bad in ['해설', '정답', '답지', 'solution', 'answer']):
+            continue
+        for y in target_years:
+            rows.append({'school_year': y, 'exam': exam, 'post_title': title, 'post_url': post.get('link',''), 'anchor': anchor, 'pdf_url': href})
+
+# Modern direct URL patterns as fallback.
+def enc_name(name):
+    return 'https://horaeng.com/wp-content/uploads/' + quote(name, safe='-_.')
+for y in range(2022, 2028):
+    exams = [('6월', f'{y}학년도-6월-모의평가-수학-문제.pdf'), ('9월', f'{y}학년도-9월-모의평가-수학-문제.pdf')]
+    if y <= 2026:
+        exams.append(('수능', f'{y}학년도-대학수학능력시험-수학-문제.pdf'))
+    for exam, fn in exams:
+        url = enc_name(fn)
+        try:
+            rr = S.head(url, timeout=20, allow_redirects=True)
+            if rr.status_code < 400:
+                rows.append({'school_year': y, 'exam': exam, 'post_title': 'direct-pattern', 'post_url': '', 'anchor': fn, 'pdf_url': url})
+        except Exception:
+            pass
+
+uniq = {}
+for r in rows:
+    uniq[(r['school_year'], r['exam'], r['pdf_url'])] = r
+verified = []
+for r in sorted(uniq.values(), key=lambda x: (x['school_year'], {'6월':0,'9월':1,'수능':2}.get(x['exam'],9), x['pdf_url'])):
     try:
-        data = json.loads(p.read_text(encoding='utf-8'))
-    except Exception:
-        continue
-    m = data.get('meta', {})
-    year = m.get('year')
-    q = m.get('question_number')
-    try:
-        year_i = int(year)
-        q_i = int(q)
-    except Exception:
-        continue
-    if not (2017 <= year_i <= 2025 and q_i >= 21):
-        continue
-    subject = str(m.get('subject', ''))
-    if 'Math' not in subject and '수학' not in subject:
-        continue
-    error = data.get('error', {})
-    rate = error.get('wrong_error_rate', '')
-    image = data.get('image', {})
-    image_items = image.get('short_answer') or image.get('multiple_choice') or []
-    image_names = sorted({str(it.get('image_name', '')) for it in image_items if isinstance(it, dict)})
-    rows.append({
-        'meta_file': p.name,
-        'year': year_i,
-        'question': q_i,
-        'subject': subject,
-        'domain': str(m.get('domain', '')),
-        'exam': str(m.get('exam', m.get('test', m.get('month', '')))),
-        'wrong_rate': rate,
-        'image_names': '|'.join(image_names),
-        'image_json': json.dumps(image_items, ensure_ascii=False),
-        'answer': json.dumps(data.get('answer', {}), ensure_ascii=False),
-    })
+        rr = S.get(r['pdf_url'], timeout=45, headers={'Referer': r['post_url'] or 'https://horaeng.com/'})
+        ok = rr.status_code == 200 and rr.content[:5] == b'%PDF-'
+        r.update(status=rr.status_code, size=len(rr.content), is_pdf=ok, error='')
+        if ok: verified.append(r)
+        print(r['school_year'], r['exam'], rr.status_code, len(rr.content), ok, r['pdf_url'])
+    except Exception as e:
+        r.update(status='ERR', size=0, is_pdf=False, error=repr(e))
 
-rows.sort(key=lambda r: (r['year'], r['image_names'], r['question']))
-
-out_csv = ROOT / 'math_items_2017_2025.csv'
-with open(out_csv, 'w', newline='', encoding='utf-8-sig') as f:
-    w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ['year'])
-    w.writeheader()
-    w.writerows(rows)
-
-(ROOT / 'source_map.json').write_text(json.dumps(source_map, ensure_ascii=False, indent=2), encoding='utf-8')
-print('source files:', len(source_map))
-print('matching items:', len(rows))
-for r in rows[:80]:
-    print(r['year'], r['image_names'], r['question'], r['domain'], r['wrong_rate'])
+all_rows = sorted(uniq.values(), key=lambda x: (x['school_year'], x['exam'], x['pdf_url']))
+fields = ['school_year','exam','post_title','post_url','anchor','pdf_url','status','size','is_pdf','error']
+for name, data in [('horaeng_candidates.csv', all_rows), ('horaeng_verified.csv', verified)]:
+    with open(ROOT/name, 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore'); w.writeheader(); w.writerows(data)
+print('posts', len(posts), 'candidates', len(all_rows), 'verified', len(verified))
