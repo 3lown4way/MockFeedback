@@ -27,7 +27,7 @@ new_locate=r'''def locate(doc,q,modern=False):
     return hits[0][0],hits[0][1]
 '''
 pat_locate=r'def locate\(doc,q,modern=False\):.*?return hits\[0\]\n'
-s,n=re.subn(pat_locate,new_locate,s,flags=re.S)
+s,n=re.subn(pat_locate,lambda m:new_locate,s,flags=re.S)
 if n!=1:
     raise RuntimeError(f'Expected one locate replacement, got {n}')
 
@@ -78,7 +78,7 @@ new_clip=r'''def make_clip(page,qrect):
     return fitz.Rect(x0,y0,x1,y1)
 '''
 pat_clip=r'def make_clip\(page,qrect\):.*?return fitz\.Rect\(x0,y0,x1,y1\)\n'
-s,n=re.subn(pat_clip,new_clip,s,flags=re.S)
+s,n=re.subn(pat_clip,lambda m:new_clip,s,flags=re.S)
 if n!=1:
     raise RuntimeError(f'Expected one make_clip replacement, got {n}')
 
